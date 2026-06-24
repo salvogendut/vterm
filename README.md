@@ -5,6 +5,10 @@ with the SDCC Z80 toolchain. It connects to a remote host over a **serial
 (RS-232)** line, renders incoming VT100 escape sequences onto the **CP/M
 console (via BDOS)**, and sends local keystrokes back out the serial line.
 
+Runs on the **Amstrad PCW** (CPS8256 Z80-DART serial) and the **Amstrad CPC**
+(USIfAC II serial); both use Amstrad CP/M Plus, whose VT52 console is shared.
+Select the target with `make PLATFORM=pcw` (default) or `make PLATFORM=cpc`.
+
 [qterm](https://git.imzadi.de/acn/qterm) is used as a *behavioural* reference
 for VT100 handling and terminal UX; vterm is an independent C implementation.
 
@@ -37,11 +41,15 @@ for VT100 handling and terminal UX; vterm is an independent C implementation.
   session (menus, `cal` with today inverse-highlighted).
 - **Milestone 7 — alternate screen: complete.** DEC modes `?1049`/`?47`/`?1047`
   (+ `?1048` cursor save) keep a second screen buffer, so full-screen apps
-  (vi, less, tmux) restore the prior screen on exit. Verified on the PCW. 60
-  host checks.
+  (vi, less, tmux) restore the prior screen on exit.
+- **Milestone 8 — Amstrad CPC target: complete.** `make PLATFORM=cpc` builds a
+  CPC `.COM`. The VT100 engine, telnet filter, CP/M layer and (because both
+  Amstrad machines share the CP/M Plus VT52 console) the renderer are all
+  reused; only the serial backend swaps to the USIfAC II (`&FBD0`/`&FBD1`).
+  Verified on the 1984 emulator, including dialling a host through PerryFi.
 
-This is a working VT100 telnet terminal. Remaining work is further breadth
-(other console back-ends) and UX. See [Roadmap](#roadmap).
+This is a working VT100 telnet terminal on two machines. Remaining work is
+breadth and UX. See [Roadmap](#roadmap).
 
 ## Prerequisites
 
@@ -92,11 +100,12 @@ and the emulator paste-timing trick.
 | `src/crt0.s` | CP/M C runtime startup: entry at `0x0100`, stack at top of TPA, `gsinit`, warm-boot on exit |
 | `src/bdos.s` | BDOS call gateway in asm (matches SDCC's `sdcccall(1)`) |
 | `src/cpm.h` / `src/cpm.c` | BDOS function constants and console helpers (`conout`, `conin`, `conkey`, `constat`, `prints`) |
-| `src/serial.h` / `src/serial.c` | Serial transport interface + CPS8256 Z80-DART backend (`serial_getc`, `serial_putc`, …) |
-| `src/cps_io.s` | Z80-DART port access (`in`/`out` on `0xE0`/`0xE1`) |
+| `src/serial.h` | Serial transport interface (`serial_getc`, `serial_putc`, …) |
+| `src/serial_cps.c` / `src/cps_io.s` | PCW backend: CPS8256 Z80-DART (`0xE0`/`0xE1`) |
+| `src/serial_usifac.c` / `src/usifac_io.s` | CPC backend: USIfAC II (`&FBD0`/`&FBD1`) |
 | `src/telnet.h` / `src/telnet.c` | Telnet IAC filter on the inbound stream (strips negotiation, replies WILL/WONT/DO/DONT) |
 | `src/vt100.h` / `src/vt100.c` | Portable VT100/ANSI engine: `vt_putc` drives an 80×24 screen model |
-| `src/render.h` / `src/render.c` | Diff the screen model onto the PCW VT52 console (`ESC Y`, inverse, bright) |
+| `src/render.h` / `src/render_vt52.c` | Diff the screen model onto the Amstrad CP/M Plus VT52 console (`ESC Y`, inverse, scroll) — shared by PCW and CPC |
 | `src/main.c` | Terminal loop: serial → VT100 → render; keyboard → serial |
 | `test/` | VT100 host unit tests, PCW disk builder, and headless emulator tests |
 
