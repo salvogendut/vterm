@@ -6,6 +6,7 @@
  * model. Run with an argument (any) to also dump the grid for a visual look.
  */
 #include "../src/vt100.h"
+#include "../src/telnet.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -255,6 +256,57 @@ int main(int argc, char **argv)
     vt_init(&t);
     feed(&t, "\033[3;5H\033[6n");
     expect_resp(&t, "\033[3;5R", "DSR cursor report");
+
+    /* --- telnet IAC filter ---------------------------------------- */
+    {
+        Telnet tn;
+        char out[64];
+        char rep[64];
+        int  n, rn, i, d, rc;
+        /* IAC stripped; IAC IAC -> literal 0xFF; data passes through */
+        static const unsigned char in1[] = {
+            'A', 'B',
+            255, 251, 1,        /* IAC WILL ECHO  -> reply DO ECHO   */
+            'C',
+            255, 253, 3,        /* IAC DO SGA     -> reply WILL SGA  */
+            255, 255,           /* IAC IAC        -> literal 0xFF    */
+            'D',
+            255, 250, 24, 'x', 255, 240,  /* IAC SB TTYPE x IAC SE (swallowed) */
+            'E'
+        };
+        telnet_init(&tn);
+        n = 0;
+        for (i = 0; i < (int)sizeof(in1); i++) {
+            d = telnet_filter(&tn, in1[i]);
+            if (d >= 0) out[n++] = (char)d;
+        }
+        out[n] = '\0';
+        checks++;
+        if (!(out[0]=='A' && out[1]=='B' && out[2]=='C' &&
+              (unsigned char)out[3]==0xFF && out[4]=='D' && out[5]=='E' && n==6)) {
+            failures++;
+            printf("FAIL %-28s got %d bytes\n", "telnet strips IAC", n);
+        }
+        /* replies: DO ECHO, WILL SGA */
+        rn = 0;
+        while ((rc = telnet_resp_getc(&tn)) >= 0) rep[rn++] = (char)rc;
+        checks++;
+        if (!(rn==6 && (unsigned char)rep[0]==255 && (unsigned char)rep[1]==253 && rep[2]==1 &&
+                      (unsigned char)rep[3]==255 && (unsigned char)rep[4]==251 && rep[5]==3)) {
+            failures++;
+            printf("FAIL %-28s got %d reply bytes\n", "telnet WILL/DO replies", rn);
+        }
+        /* a host DO we refuse -> WONT */
+        telnet_init(&tn);
+        telnet_filter(&tn, 255); telnet_filter(&tn, 253); telnet_filter(&tn, 31); /* DO NAWS */
+        rn = 0;
+        while ((rc = telnet_resp_getc(&tn)) >= 0) rep[rn++] = (char)rc;
+        checks++;
+        if (!(rn==3 && (unsigned char)rep[1]==252 && (unsigned char)rep[2]==31)) { /* WONT NAWS */
+            failures++;
+            printf("FAIL %-28s got %d\n", "telnet refuses DO NAWS", rn);
+        }
+    }
 
     (void)argv;
     printf("\n%d checks, %d failure(s)\n", checks, failures);

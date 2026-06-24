@@ -29,12 +29,15 @@ for VT100 handling and terminal UX; vterm is an independent C implementation.
 - **Milestone 5 — wider VT100/ANSI coverage: complete.** Line-drawing charset,
   insert/delete line & char, scroll/erase ops, tab stops, DEC modes
   (autowrap/origin/cursor), 256-colour/truecolour SGR skipping, and DA/DSR
-  host replies (52 host checks). Verified on the PCW: a TUI pattern with a
-  DEC line-drawing box, inverse/bold, and a working `ESC[6n` cursor report.
+  host replies. Verified on the PCW with a TUI test pattern.
+- **Milestone 6 — telnet: complete.** A telnet IAC filter (`telnet.[ch]`)
+  strips negotiation bytes before the VT100 engine and replies with the right
+  WILL/WONT/DO/DONT, so real telnet hosts render cleanly. **Confirmed live:**
+  dialing `telehack.com` through the PerryFi modem renders the full host
+  session (menus, `cal` with today inverse-highlighted). 55 host checks.
 
-This is a working VT100 terminal with broad sequence coverage. Remaining work
-is further breadth (alternate screen, other console back-ends) and UX. See
-[Roadmap](#roadmap).
+This is a working VT100 telnet terminal. Remaining work is further breadth
+(alternate screen, other console back-ends) and UX. See [Roadmap](#roadmap).
 
 ## Prerequisites
 
@@ -87,6 +90,7 @@ and the emulator paste-timing trick.
 | `src/cpm.h` / `src/cpm.c` | BDOS function constants and console helpers (`conout`, `conin`, `conkey`, `constat`, `prints`) |
 | `src/serial.h` / `src/serial.c` | Serial transport interface + CPS8256 Z80-DART backend (`serial_getc`, `serial_putc`, …) |
 | `src/cps_io.s` | Z80-DART port access (`in`/`out` on `0xE0`/`0xE1`) |
+| `src/telnet.h` / `src/telnet.c` | Telnet IAC filter on the inbound stream (strips negotiation, replies WILL/WONT/DO/DONT) |
 | `src/vt100.h` / `src/vt100.c` | Portable VT100/ANSI engine: `vt_putc` drives an 80×24 screen model |
 | `src/render.h` / `src/render.c` | Diff the screen model onto the PCW VT52 console (`ESC Y`, inverse, bright) |
 | `src/main.c` | Terminal loop: serial → VT100 → render; keyboard → serial |
@@ -106,7 +110,9 @@ and the emulator paste-timing trick.
    IL/DL/ICH/DCH/ECH editing, CNL/CPL/SU/SD, tab stops (HTS/TBC/CHT/CBT),
    modes (DECAWM/DECOM/DECTCEM), 256-colour/truecolour SGR skipping, and DA/DSR
    replies (queued for the host). Covered by 52 host checks.
-5. **Further breadth.** Alternate screen buffer (for vi/less), a configurable
+5. ~~**Telnet.**~~ Done — `telnet.[ch]` IAC filter; verified live against
+   `telehack.com` via the PerryFi modem.
+6. **Further breadth.** Alternate screen buffer (for vi/less), a configurable
    console back-end for other CP/M machines (the renderer is PCW-VT52-specific
    today), `SETSIO`-free DART setup for real hardware, and UX (status line,
    capture, file transfer).

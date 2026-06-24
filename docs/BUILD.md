@@ -137,6 +137,18 @@ with `cpmcp -f pcw` (cpmtools + libdsk, in the container). Boot it and run
 `vterm`. Caveat learned the hard way: do **not** delete `J17CPM3.EMS` — that is
 the CP/M 3 system file; without it the disk no longer boots (blank screen).
 
+## Telnet IAC filter (`src/telnet.[ch]`)
+
+PerryFi (and most TCP "modems") connect raw, so a telnet host's IAC negotiation
+(`0xFF …`) arrives inline and would render as garbage. `telnet_filter()` sits
+between `serial_getc()` and `vt_putc()`: it swallows `IAC` command sequences
+(2-byte commands, 3-byte `WILL/WONT/DO/DONT <opt>`, and `IAC SB … IAC SE`),
+unescapes `IAC IAC` to a literal `0xFF`, and queues replies the caller drains to
+the host. Reply policy is loop-free: answer the host's offers/requests (`WILL` →
+`DO` for ECHO/SGA else `DONT`; `DO` → `WILL` for SGA else `WONT`) and stay
+silent on `WONT`/`DONT` acknowledgements. It's transparent to non-telnet streams
+with no `0xFF` bytes. Verified live against `telehack.com` through PerryFi.
+
 ## Serial backend — CPS8256 Z80-DART (`src/cps_io.s`, `src/serial.c`)
 
 The PCW's serial line is channel A of the Z80-DART in the CPS8256 add-on:
