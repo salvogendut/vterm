@@ -1,5 +1,10 @@
 /*
- * render.c - VT100 screen model -> Amstrad PCW (VT52) console. See render.h.
+ * render_vt52.c - VT100 screen model -> Amstrad CP/M Plus VT52 console.
+ *
+ * Shared by the PCW and the CPC: both run Amstrad CP/M Plus, whose console
+ * speaks the same VT52 dialect (ESC Y position, ESC E clear, ESC K erase EOL,
+ * ESC M/L line delete/insert for scrolling, ESC p/q inverse, ESC e/f cursor).
+ * See render.h.
  */
 #include "render.h"
 #include "cpm.h"
