@@ -46,6 +46,9 @@ typedef struct {
     unsigned char top, bot;               /* scroll region, 0-based incl */
     unsigned char wrap_pending;           /* deferred last-column wrap   */
     unsigned char dirty;                  /* set when the model changes  */
+    signed char   scroll;                 /* net full-screen scroll since
+                                             the last render: +up / -down,
+                                             a hint for native console scroll */
 
     /* Modes. */
     unsigned char autowrap;               /* DECAWM (default on)        */

@@ -66,6 +66,19 @@ static void blank_row(VT *t, unsigned char r)
     erase_cells(t, r, 0, VT_COLS - 1);
 }
 
+/* Note whole-screen scrolls so the renderer can use a native console scroll
+ * (ESC M / ESC L) instead of repainting every cell. Region scrolls don't map
+ * to the PCW's line-delete/insert and fall back to a normal diff repaint. */
+static void note_scroll(VT *t, int delta)
+{
+    int s;
+    if (t->top != 0 || t->bot != VT_ROWS - 1) return;
+    s = (int)t->scroll + delta;
+    if (s >  100) s =  100;
+    if (s < -100) s = -100;
+    t->scroll = (signed char)s;
+}
+
 static void scroll_up(VT *t, unsigned char n)
 {
     unsigned char r;
@@ -77,6 +90,7 @@ static void scroll_up(VT *t, unsigned char n)
     }
     for (r = (unsigned char)(t->bot - n + 1); r <= t->bot; r++)
         blank_row(t, r);
+    note_scroll(t, (int)n);
     t->dirty = 1;
 }
 
@@ -92,6 +106,7 @@ static void scroll_down(VT *t, unsigned char n)
     }
     for (r = t->top; r <= (unsigned char)(t->top + n - 1); r++)
         blank_row(t, r);
+    note_scroll(t, -(int)n);
     t->dirty = 1;
 }
 
@@ -305,6 +320,7 @@ static void enter_alt(VT *t)
     for (r = 0; r < VT_ROWS; r++)
         blank_row(t, r);                            /* alt starts blank  */
     t->on_alt = 1;
+    t->scroll = 0;                                  /* wholesale change  */
     t->dirty = 1;
 }
 
@@ -314,6 +330,7 @@ static void leave_alt(VT *t)
     copy_plane(t->ch,   t->alt_ch);                 /* restore the primary */
     copy_plane(t->attr, t->alt_attr);
     t->on_alt = 0;
+    t->scroll = 0;                                  /* wholesale change  */
     t->dirty = 1;
 }
 
@@ -564,6 +581,7 @@ void vt_init(VT *t)
     t->bot = VT_ROWS - 1;
     t->wrap_pending = 0;
     t->dirty = 1;
+    t->scroll = 0;
     t->autowrap = 1;
     t->origin_mode = 0;
     t->cursor_visible = 1;
@@ -594,6 +612,13 @@ void vt_putc(VT *t, unsigned char c)
     switch (t->state) {
     case VT_ST_GROUND:
         if (c == 0x1B)            t->state = VT_ST_ESC;
+        else if (c == 0x7F) {     /* DEL: destructive backspace (PCW VDU 127) */
+            if (t->col > 0) t->col--;
+            t->ch[t->row][t->col]   = ' ';
+            t->attr[t->row][t->col] = VT_A_NORMAL;
+            t->wrap_pending = 0;
+            t->dirty = 1;
+        }
         else if (c < 0x20)        ctrl(t, c);
         else                      put_glyph(t, c);
         break;

@@ -127,7 +127,20 @@ through BDOS console output (`conout`, function 2) with these codes:
 
 `render_flush()` diffs the VT100 model against a shadow buffer and writes only
 changed cells; consecutive changes in a row reuse the auto-advanced cursor, so
-positioning is emitted only when there's a gap. Two empirical gotchas: `ESC E`
+positioning is emitted only when there's a gap.
+
+**Native scrolling.** Repainting every cell on each scroll is painfully slow
+over per-char BDOS output, so whole-screen scrolls use the PCW console's line
+delete/insert (it's Z19/Z29-like): the engine records a net full-screen scroll
+in `t->scroll`, and `render_flush()` emits `ESC M` (delete line, = scroll up) or
+`ESC L` (insert line, = scroll down) at the top, shifts its shadow to match, and
+then only the genuinely-new line repaints. A screenful scroll drops from ~2 KB
+of output to a few bytes plus one line. Region (DECSTBM) scrolls don't map to
+`ESC M`/`ESC L` and fall back to a normal diff repaint.
+
+vterm also treats a received `0x7F` (DEL) as a **destructive backspace** (move
+left + erase), matching the PCW console's "VDU 127" — so the backspace a modem
+echoes while editing an `ATDT…` line actually erases. Two empirical gotchas: `ESC E`
 does **not** reliably wipe the whole PCW screen, so `render_init()` also erases
 each row with `ESC K`; and the inverse/bright codes (`ESC p/q/r/u`) are the ones
 that actually work on the PCW console (confirmed on the emulator — `INVERSE`

@@ -3,6 +3,7 @@
  */
 #include "render.h"
 #include "cpm.h"
+#include <string.h>
 
 #define ESC 0x1B
 
@@ -70,9 +71,52 @@ void render_init(void)
     move_to(0, 0);
 }
 
+/* Mirror a whole-screen scroll onto the console with native line delete/insert
+ * (ESC M / ESC L), and shift the shadow to match, so only genuinely-new cells
+ * repaint afterwards instead of the whole screen. */
+static void apply_scroll(signed char sc)
+{
+    unsigned char n, k, r;
+    n = (sc > 0) ? (unsigned char)sc : (unsigned char)(-sc);
+    if (n > VT_ROWS) n = VT_ROWS;
+
+    if (cur_attr != VT_A_NORMAL)
+        set_attr(VT_A_NORMAL);          /* blanked line should be normal */
+    move_to(0, 0);
+    for (k = 0; k < n; k++)
+        esc2(sc > 0 ? 'M' : 'L');       /* delete line = up, insert = down */
+
+    if (sc > 0) {                       /* scroll up: drop top n rows */
+        for (r = 0; (unsigned char)(r + n) < VT_ROWS; r++) {
+            memcpy(sh_ch[r],   sh_ch[r + n],   VT_COLS);
+            memcpy(sh_attr[r], sh_attr[r + n], VT_COLS);
+        }
+        for (r = (unsigned char)(VT_ROWS - n); r < VT_ROWS; r++) {
+            unsigned char cc;
+            for (cc = 0; cc < VT_COLS; cc++) { sh_ch[r][cc] = ' '; sh_attr[r][cc] = VT_A_NORMAL; }
+        }
+    } else {                            /* scroll down: shift rows down n */
+        for (r = VT_ROWS - 1; r >= n; r--) {
+            memcpy(sh_ch[r],   sh_ch[r - n],   VT_COLS);
+            memcpy(sh_attr[r], sh_attr[r - n], VT_COLS);
+            if (r == 0) break;
+        }
+        for (r = 0; r < n; r++) {
+            unsigned char cc;
+            for (cc = 0; cc < VT_COLS; cc++) { sh_ch[r][cc] = ' '; sh_attr[r][cc] = VT_A_NORMAL; }
+        }
+    }
+    cur_r = 0; cur_c = 0; cur_known = 1;
+}
+
 void render_flush(VT *t)
 {
     unsigned char r, c, ch, at;
+
+    if (t->scroll) {
+        apply_scroll(t->scroll);
+        t->scroll = 0;
+    }
 
     for (r = 0; r < VT_ROWS; r++) {
         for (c = 0; c < VT_COLS; c++) {

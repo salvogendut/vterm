@@ -257,6 +257,11 @@ int main(int argc, char **argv)
     feed(&t, "\033[3;5H\033[6n");
     expect_resp(&t, "\033[3;5R", "DSR cursor report");
 
+    /* DEL (0x7F) is a destructive backspace, not a glyph */
+    vt_init(&t);
+    feed(&t, "ABCD\x7f\x7fX");
+    expect_row(&t, 0, "ABX", "DEL destructive backspace");
+
     /* alternate screen: ?1049 saves/clears, restores on exit */
     vt_init(&t);
     feed(&t, "PRIMARY\033[5;5Hx");          /* primary content + cursor (4,5) */
