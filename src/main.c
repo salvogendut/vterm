@@ -1,35 +1,43 @@
 /*
- * main.c - vterm scaffold entry point
+ * main.c - vterm
  *
- * This is the toolchain/scaffolding milestone: it proves the SDCC -> .COM
- * build chain, the crt0 startup, and bidirectional console I/O through the
- * BDOS layer.  It does NOT yet do any serial or VT100 work -- those are the
- * next milestones (see README.md).
+ * Milestone 2: serial passthrough. A bare terminal loop that pumps bytes
+ * between the CP/M console and the serial line:
  *
- * Behaviour: print a banner, then echo typed characters until the user
- * presses Return, then exit back to CP/M.
+ *   serial -> console   (display whatever the remote sends)
+ *   console -> serial   (send local keystrokes to the remote)
+ *
+ * No VT100 interpretation yet -- raw bytes both ways. The VT100 parser and
+ * screen model are the next milestone; they will sit on the serial->console
+ * path. Press Ctrl-] to quit back to CP/M.
  */
 #include "cpm.h"
+#include "serial.h"
 
-#define CR  '\r'
-#define LF  '\n'
+#define CTRL_RBRACKET  0x1D   /* Ctrl-]  : local "quit" key */
 
 void main(void)
 {
-	char c;
+	int           ch;
+	unsigned char k;
 
-	prints("vterm - CP/M VT100 terminal (scaffold build)\r\n");
-	prints("Type a line and press Return to exit.\r\n> ");
+	prints("vterm: serial passthrough -- Ctrl-] to quit\r\n");
+	serial_init();
 
 	for (;;) {
-		c = conin();
-		if (c == CR) {
-			conout(CR);
-			conout(LF);
-			break;
+		/* Drain one inbound byte (non-blocking) to the console. */
+		ch = serial_getc();
+		if (ch >= 0)
+			conout((char)ch);
+
+		/* Forward one local keystroke (non-blocking) to the line. */
+		k = conkey();
+		if (k) {
+			if (k == CTRL_RBRACKET)
+				break;
+			serial_putc(k);
 		}
-		conout(c);
 	}
 
-	prints("bye\r\n");
+	prints("\r\nvterm: bye\r\n");
 }

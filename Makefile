@@ -9,8 +9,12 @@ SDAS     := $(SDCC_BIN)/sdasz80
 MAKEBIN  := $(SDCC_BIN)/makebin
 
 # CP/M disk image tooling and the PCW emulator used for headless testing.
-IDSK     ?= ../idsk/iDSK
-EMU_PCW  ?= ../1985/1985
+# The emulator is an SDL3 app built against the distrobox container's SDL3,
+# so the test targets run it inside that container.
+IDSK      ?= ../idsk/iDSK
+EMU        ?= ../1985-testing/1985
+CONTAINER  ?= my-distrobox
+BOOT_DISK  ?= $(HOME)/Documents/CPM Boot/CPM3 1-07.dsk
 
 BUILD    := build
 DIST     := dist
@@ -23,9 +27,10 @@ CFLAGS   := -mz80 --opt-code-size
 LDFLAGS  := -mz80 --no-std-crt0 --code-loc 0x0100 --data-loc 0x0000
 
 # crt0 must be linked first so that init lands at 0x0100.
-OBJS := $(BUILD)/crt0.rel $(BUILD)/bdos.rel $(BUILD)/cpm.rel $(BUILD)/main.rel
+OBJS := $(BUILD)/crt0.rel $(BUILD)/bdos.rel $(BUILD)/cps_io.rel \
+        $(BUILD)/cpm.rel $(BUILD)/serial.rel $(BUILD)/main.rel
 
-.PHONY: all disk clean test-pcw
+.PHONY: all disk clean test-pcw test-serial
 all: $(TARGET)
 
 # Compile C sources.
@@ -59,16 +64,24 @@ $(DISK): $(TARGET)
 	$(IDSK) $(DISK) -i $(TARGET) -t 2 -f
 	$(IDSK) $(DISK) -l
 
-# Headless smoke test on the PCW emulator: boot CP/M Plus from drive A
-# (taken from ~/.config/1985/1985.conf), mount the vterm disk as B:, type
-# `b:`/`vterm`, and capture a screenshot to build/vterm-pcw.ppm.  Leading
-# newlines + ONE_K_PASTE_GAP delay the keystrokes until after the boot.
+# Headless console smoke test on the PCW emulator (inside the container):
+# boot CP/M Plus, mount the vterm disk as B:, type `b:`/`vterm`, and capture
+# build/vterm-pcw.ppm.  Leading newlines + ONE_K_PASTE_GAP delay the
+# keystrokes until after boot (see docs/BUILD.md).
 test-pcw: $(DISK)
-	ONE_K_PASTE_GAP=60 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy $(EMU_PCW) \
-	  --disk-b $(abspath $(DISK)) \
-	  --paste "$$(printf '\n\n\n\n\n\n\n\nb:\nvterm\n')" \
-	  --screenshot-at 1600:$(abspath $(BUILD))/vterm-pcw.ppm --exit-after 1650
+	distrobox enter $(CONTAINER) -- bash -c 'ONE_K_PASTE_GAP=60 \
+	  SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$(abspath $(EMU))" \
+	  --disk-a "$(BOOT_DISK)" --disk-b "$(abspath $(DISK))" \
+	  --paste "$$(printf "\n\n\n\n\n\n\n\nb:\nvterm\n")" \
+	  --screenshot-at 1600:"$(abspath $(BUILD))/vterm-pcw.ppm" --exit-after 1650'
 	@echo "Screenshot: $(BUILD)/vterm-pcw.ppm"
+
+# Headless serial round-trip test: vterm passthrough + an echo peer on the
+# serial PTY. Typed text only shows if it survives the full TX->RX loop.
+test-serial: $(DISK)
+	EMU="$(abspath $(EMU))" BOOT_DISK="$(BOOT_DISK)" DISK="$(abspath $(DISK))" \
+	  distrobox enter $(CONTAINER) -- bash $(abspath test/run-serial.sh)
+	@echo "Screenshot: $(BUILD)/vterm-serial.ppm"
 
 clean:
 	rm -rf $(BUILD) $(DIST)

@@ -24,7 +24,8 @@ unsigned int  bdos16(unsigned char func, unsigned int arg);
 
 /* --- console helpers (implemented in cpm.c) ------------------------- */
 void          conout(char c);        /* write one char to the console   */
-char          conin(void);           /* read one char (blocks)          */
+char          conin(void);           /* read one char (blocks, no echo) */
+unsigned char conkey(void);          /* raw read, 0 if no key (no echo) */
 unsigned char constat(void);         /* nonzero if a key is waiting      */
 void          prints(const char *s); /* write a NUL-terminated string    */
 

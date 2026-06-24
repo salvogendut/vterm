@@ -93,7 +93,40 @@ likewise labelled "CPC,PCW".) iDSK does **not** correctly write PCW-native
 system disks, so we mount this as a *data* drive (B:) rather than trying to add
 files to a bootable PCW disk.
 
-## Headless test on the PCW emulator (`1985`)
+## Serial backend — CPS8256 Z80-DART (`src/cps_io.s`, `src/serial.c`)
+
+The PCW's serial line is channel A of the Z80-DART in the CPS8256 add-on:
+
+| Port | Use |
+|------|-----|
+| `0xE0` | DART channel A data (read = RX byte, write = TX byte) |
+| `0xE1` | DART channel A control: write `WR0` to select a register; read returns the selected `RRx` |
+| `0xE4`–`0xE7` | 8253 PIT used as the baud generator (set by `SETSIO`) |
+
+Reading status (`RR0`): write `0` to `0xE1` to point the register pointer at
+`RR0`, then read `0xE1`. `RR0` bit 0 = RX char available, bit 2 = TX buffer
+empty. **Reading `0xE0` pops a byte unconditionally**, so always check the RX
+bit first. We only touch fixed ports, so `cps_io.s` uses immediate-port I/O
+(`in a,(0xE0)` / `out (0xE1),a`) — a single argument in `A`, no register
+juggling — and the PCW decodes only the low 8 address bits, so the high byte on
+the bus is irrelevant. Baud and line setup are left to `SETSIO`/firmware;
+`serial_init()` is a no-op.
+
+## Headless test on the PCW emulator (`1985-testing`)
+
+The emulator is an SDL3 app built against the **distrobox container's** SDL3
+(`distrobox enter my-distrobox -- … autoreconf -fiv && ./configure && make`),
+so the `make test-pcw` / `make test-serial` targets run it inside that
+container. The container shares `$HOME` and `/tmp`, so disk paths, the serial
+PTY, and the screenshot output are all visible from the host (convert the
+`.ppm` with `magick`).
+
+**Serial round-trip test** (`test/run-serial.sh`): boots CP/M Plus, runs vterm
+from drive B with the serial line on a PTY, attaches `test/echo_peer.py`, types
+`PING-1234`, and screenshots. vterm does **no** local echo, so the text only
+appears if it survived TX → serial → echo → RX. One gotcha: the emulator checks
+PerryFi before the PTY serial backend on RX, so the generated test config sets
+`ext_perryfi=false`.
 
 ```
 ONE_K_PASTE_GAP=60 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \

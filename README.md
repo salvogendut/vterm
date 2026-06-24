@@ -10,13 +10,15 @@ for VT100 handling and terminal UX; vterm is an independent C implementation.
 
 ## Status
 
-**Milestone 1 — toolchain + scaffolding: complete.** The SDCC → `.COM` build
-works, there is a thin BDOS console layer, and a placeholder `main` proves the
-chain end-to-end. Verified running under real CP/M Plus on the PCW emulator
-(banner prints, console input echoes, clean exit back to the CP/M prompt).
+- **Milestone 1 — toolchain + scaffolding: complete.** SDCC → `.COM` build,
+  thin BDOS console layer.
+- **Milestone 2 — serial passthrough: complete.** A terminal loop pumps raw
+  bytes both ways between the CP/M console and the serial line, driving the
+  Amstrad CPS8256 Z80-DART directly for non-blocking I/O. Verified under real
+  CP/M Plus on the PCW emulator with an echo peer: typed text makes the full
+  TX → serial → RX round trip and appears on screen.
 
-The serial transport, VT100 parser, and screen model are not implemented yet
-(see [Roadmap](#roadmap)).
+The VT100 parser and screen model are next (see [Roadmap](#roadmap)).
 
 ## Prerequisites
 
@@ -26,17 +28,20 @@ These live as sibling directories next to this repo:
 |------|------------|
 | `../sdcc` | SDCC 4.5+ with Z80 support (`sdcc`, `sdasz80`, `makebin`) |
 | `../idsk` | [iDSK](https://github.com/cpcsdk/idsk) for writing `.dsk` images |
-| `../1985` | Amstrad PCW emulator (CP/M Plus) — for headless testing |
+| `../1985-testing` | Amstrad PCW emulator (CP/M Plus) — for headless testing |
 | `../1984` | Amstrad CPC emulator (CP/M 2.2 / Plus) — alternative target |
 
-Override any path on the make command line, e.g. `make SDCC_BIN=/opt/sdcc/bin`.
+The test targets run the (SDL3) emulator inside the `my-distrobox` container,
+which has SDL3; override with `make CONTAINER=<name>`. Override any path on the
+make command line, e.g. `make SDCC_BIN=/opt/sdcc/bin EMU=../1985/1985`.
 
 ## Build
 
 ```bash
 make           # -> build/VTERM.COM   (a CP/M .COM image, code at 0x0100)
 make disk      # -> dist/vterm.dsk    (VTERM.COM on a CP/M-readable .dsk)
-make test-pcw  # headless: boot CP/M Plus on ../1985, run vterm, screenshot
+make test-pcw     # headless: boot CP/M Plus, run vterm, screenshot
+make test-serial  # headless serial round-trip test (vterm + echo peer)
 make clean
 ```
 
@@ -63,20 +68,21 @@ calling convention, `.COM` packaging, and the emulator paste-timing trick).
 |------|------|
 | `src/crt0.s` | CP/M C runtime startup: entry at `0x0100`, stack at top of TPA, `gsinit`, warm-boot on exit |
 | `src/bdos.s` | BDOS call gateway in asm (matches SDCC's `sdcccall(1)`) |
-| `src/cpm.h` / `src/cpm.c` | BDOS function constants and console helpers (`conout`, `conin`, `constat`, `prints`) |
-| `src/main.c` | Scaffold entry point (banner + echo demo); will become the terminal loop |
+| `src/cpm.h` / `src/cpm.c` | BDOS function constants and console helpers (`conout`, `conin`, `conkey`, `constat`, `prints`) |
+| `src/serial.h` / `src/serial.c` | Serial transport interface + CPS8256 Z80-DART backend (`serial_getc`, `serial_putc`, …) |
+| `src/cps_io.s` | Z80-DART port access (`in`/`out` on `0xE0`/`0xE1`) |
+| `src/main.c` | Terminal loop (currently raw serial passthrough) |
+| `test/` | Headless serial test: echo peer + emulator orchestration |
 
 ## Roadmap
 
-1. **Serial transport.** Abstract the link behind a small
-   `serial_getc` / `serial_putc` / `serial_status` interface. Start over BDOS
-   AUX (functions 3/4) for portability; add a direct-port-I/O backend later for
-   real non-blocking operation. (Standard BDOS AUX is blocking and has no poll,
-   which a live terminal needs — hence the interface seam now.) The `1985`
-   emulator exposes a serial PTY (`ext_serial`), which is a convenient test
-   peer.
+1. ~~**Serial transport.**~~ Done — `serial.h` seam with a direct CPS8256
+   Z80-DART backend (non-blocking poll of ports `0xE0`/`0xE1`); baud is left to
+   `SETSIO`/firmware. A BDOS-AUX backend could be added behind the same
+   interface for portability.
 2. **VT100 parser + screen model.** A host-testable C state machine that
-   consumes the serial byte stream and maintains a screen buffer.
+   consumes the serial byte stream (the `serial → console` path in `main.c`)
+   and maintains a screen buffer.
 3. **Renderer.** Translate the screen model to the local CP/M console.
 
 ## License

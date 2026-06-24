@@ -14,11 +14,20 @@ void conout(char c)
  * function 1 (C_READ) because it echoes and acts on control characters --
  * a terminal must control the display itself and pass raw bytes through.
  */
+/*
+ * Non-blocking raw console read (BDOS function 6, E=0xFF): returns the
+ * character, or 0 if no key is waiting. No echo, no control-char handling.
+ */
+unsigned char conkey(void)
+{
+	return bdos(BDOS_C_RAWIO, 0x00FF);
+}
+
 char conin(void)
 {
 	unsigned char c;
 	do {
-		c = bdos(BDOS_C_RAWIO, 0x00FF);
+		c = conkey();
 	} while (c == 0);
 	return (char)c;
 }
