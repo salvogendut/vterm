@@ -104,6 +104,38 @@ malloc); on the target that will be one global. SDCC emits warning 110
 ("…EVELYN the modified DOG") on the TAB arithmetic — that is SDCC's benign
 peephole notice, not a logic issue.
 
+## Renderer — PCW VT52 console (`src/render.c`)
+
+The PCW CP/M Plus console is a VT52-style terminal. The renderer drives it
+through BDOS console output (`conout`, function 2) with these codes:
+
+| Sequence | Bytes | Effect |
+|----------|-------|--------|
+| `ESC Y` row col | `1B 59 (row+32) (col+32)` | cursor position — **row first** |
+| `ESC E` | `1B 45` | clear screen + home |
+| `ESC K` | `1B 4B` | erase to end of line |
+| `ESC p` / `ESC q` | `1B 70` / `1B 71` | inverse video on / off |
+| `ESC r` / `ESC u` | `1B 72` / `1B 75` | bright on / off |
+
+`render_flush()` diffs the VT100 model against a shadow buffer and writes only
+changed cells; consecutive changes in a row reuse the auto-advanced cursor, so
+positioning is emitted only when there's a gap. Two empirical gotchas: `ESC E`
+does **not** reliably wipe the whole PCW screen, so `render_init()` also erases
+each row with `ESC K`; and the inverse/bright codes (`ESC p/q/r/u`) are the ones
+that actually work on the PCW console (confirmed on the emulator — `INVERSE`
+renders in real inverse video).
+
+## Building the bootable PCW disk (`test/make-pcw-disk.sh`)
+
+The PCW won't read iDSK's CPC DATA-format disks (sector IDs `0xC1`–`0xC9`); the
+PCW format uses sector IDs `1`–`9`, a disc-specification record in track 0 /
+sector 1 (which CP/M 3 reads to auto-detect the format), and one reserved boot
+track. Rather than synthesise all that, `make disk` builds a **bootable** image:
+copy a real CP/M Plus boot disk, drop `BASIC.COM` for space, and add `VTERM.COM`
+with `cpmcp -f pcw` (cpmtools + libdsk, in the container). Boot it and run
+`vterm`. Caveat learned the hard way: do **not** delete `J17CPM3.EMS` — that is
+the CP/M 3 system file; without it the disk no longer boots (blank screen).
+
 ## Serial backend — CPS8256 Z80-DART (`src/cps_io.s`, `src/serial.c`)
 
 The PCW's serial line is channel A of the Z80-DART in the CPS8256 add-on:

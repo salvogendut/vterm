@@ -1,36 +1,59 @@
 /*
  * main.c - vterm
  *
- * Milestone 2: serial passthrough. A bare terminal loop that pumps bytes
- * between the CP/M console and the serial line:
+ * The terminal loop. Inbound serial bytes feed the VT100 engine, which
+ * maintains the screen model; the renderer paints changed cells onto the
+ * CP/M console. Local keystrokes go straight out the serial line.
  *
- *   serial -> console   (display whatever the remote sends)
- *   console -> serial   (send local keystrokes to the remote)
+ *   serial -> vt_putc(model) -> render -> CP/M console
+ *   keyboard -> serial
  *
- * No VT100 interpretation yet -- raw bytes both ways. The VT100 parser and
- * screen model are the next milestone; they will sit on the serial->console
- * path. Press Ctrl-] to quit back to CP/M.
+ * Press Ctrl-] to quit back to CP/M.
  */
 #include "cpm.h"
 #include "serial.h"
+#include "vt100.h"
+#include "render.h"
 
-#define CTRL_RBRACKET  0x1D   /* Ctrl-]  : local "quit" key */
+#define CTRL_RBRACKET  0x1D   /* Ctrl-] : local "quit" key */
+#define BURST_CAP      250    /* max inbound bytes per loop before repainting */
+
+static VT screen;             /* the terminal screen model (~3.8 KB, BSS) */
 
 void main(void)
 {
 	int           ch;
-	unsigned char k;
+	unsigned char k, n;
 
-	prints("vterm: serial passthrough -- Ctrl-] to quit\r\n");
 	serial_init();
+	vt_init(&screen);
+	render_init();        /* clear console, cursor home */
+
+	/* Startup banner drawn THROUGH the VT engine, so a blank screen vs a
+	 * visible banner tells us whether render works independent of serial. */
+	{
+		const char *b = "vterm ready -- waiting for host\r\n";
+		while (*b)
+			vt_putc(&screen, (unsigned char)*b++);
+		render_flush(&screen);
+		screen.dirty = 0;
+	}
 
 	for (;;) {
-		/* Drain one inbound byte (non-blocking) to the console. */
-		ch = serial_getc();
-		if (ch >= 0)
-			conout((char)ch);
+		/* Pull a burst of inbound bytes into the model, then repaint
+		 * once -- batching keeps console output and keys responsive. */
+		n = 0;
+		while ((ch = serial_getc()) >= 0) {
+			vt_putc(&screen, (unsigned char)ch);
+			if (++n >= BURST_CAP)
+				break;
+		}
+		if (screen.dirty) {
+			render_flush(&screen);
+			screen.dirty = 0;
+		}
 
-		/* Forward one local keystroke (non-blocking) to the line. */
+		/* Forward one local keystroke to the line. */
 		k = conkey();
 		if (k) {
 			if (k == CTRL_RBRACKET)
@@ -39,5 +62,6 @@ void main(void)
 		}
 	}
 
-	prints("\r\nvterm: bye\r\n");
+	render_init();        /* leave a clean console */
+	prints("vterm: bye\r\n");
 }

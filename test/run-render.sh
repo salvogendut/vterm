@@ -1,19 +1,20 @@
 #!/bin/bash
-# Headless serial round-trip test: boot the vterm disk, run vterm from A:,
-# attach an echo peer to the serial PTY, type a string, and screenshot. vterm
-# sends keystrokes out the serial line; the peer echoes them; vterm receives
-# them and the renderer paints them. Because vterm does not echo locally, the
-# text only appears if it made the full TX -> serial -> RX round trip.
+# Headless render test: boot the bootable vterm disk, run vterm from A:, attach
+# a VT100-sending peer to the serial PTY, and screenshot. The peer sends a
+# VT100 test pattern; vterm parses it and the renderer paints it on the PCW
+# (VT52) console.
 #
-# Run inside the container:  distrobox enter <box> -- bash test/run-serial.sh
-# Env overrides: EMU, DISK, SHOT, PEER.
+# Run inside the container (emulator + peer share a PTY namespace):
+#   distrobox enter <box> -- bash test/run-render.sh
+#
+# Env overrides: EMU, DISK (bootable, vterm on A:), SHOT, PEER.
 set -u
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 EMU="${EMU:-$HERE/../1985-testing/1985}"
 DISK="${DISK:-$HERE/dist/vterm.dsk}"
-SHOT="${SHOT:-$HERE/build/vterm-serial.ppm}"
-PEER="${PEER:-$HERE/test/echo_peer.py}"
+SHOT="${SHOT:-$HERE/build/vterm-render.ppm}"
+PEER="${PEER:-$HERE/test/vt_peer.py}"
 CONF="$HERE/build/render-test.conf"
 LINK=/tmp/vterm-serial-test
 EMU_LOG=/tmp/vterm-emu.log
@@ -41,10 +42,10 @@ ext_sanpollo_backplane = true
 tinker = true
 EOF
 
-# Boot, run vterm, then type PING-1234 (which only shows if it round-trips).
+# Boot, then run vterm from A: (generous lead-in past boot/disk activity).
 ONE_K_PASTE_GAP=70 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
   "$EMU" --config "$CONF" \
-  --paste "$(printf '\n\n\n\n\n\n\n\n\n\nvterm\nPING-1234')" \
+  --paste "$(printf '\n\n\n\n\n\n\n\n\n\nvterm\n')" \
   --screenshot-at 2800:"$SHOT" --exit-after 2860 2>"$EMU_LOG" &
 EMUPID=$!
 

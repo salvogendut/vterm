@@ -8,10 +8,9 @@ SDCC     := $(SDCC_BIN)/sdcc
 SDAS     := $(SDCC_BIN)/sdasz80
 MAKEBIN  := $(SDCC_BIN)/makebin
 
-# CP/M disk image tooling and the PCW emulator used for headless testing.
-# The emulator is an SDL3 app built against the distrobox container's SDL3,
-# so the test targets run it inside that container.
-IDSK      ?= ../idsk/iDSK
+# The PCW emulator and disk tooling used for headless testing. The emulator is
+# an SDL3 app and the disk is built with cpmtools (pcw diskdef + libdsk); both
+# live in the distrobox container, so the disk/test targets run inside it.
 EMU        ?= ../1985-testing/1985
 CONTAINER  ?= my-distrobox
 BOOT_DISK  ?= $(HOME)/Documents/CPM Boot/CPM3 1-07.dsk
@@ -28,9 +27,10 @@ LDFLAGS  := -mz80 --no-std-crt0 --code-loc 0x0100 --data-loc 0x0000
 
 # crt0 must be linked first so that init lands at 0x0100.
 OBJS := $(BUILD)/crt0.rel $(BUILD)/bdos.rel $(BUILD)/cps_io.rel \
-        $(BUILD)/cpm.rel $(BUILD)/serial.rel $(BUILD)/main.rel
+        $(BUILD)/cpm.rel $(BUILD)/serial.rel $(BUILD)/vt100.rel \
+        $(BUILD)/render.rel $(BUILD)/main.rel
 
-.PHONY: all disk clean test-pcw test-serial test-vt100
+.PHONY: all disk clean test-render test-serial test-vt100
 all: $(TARGET)
 
 # Host (gcc) unit tests for the portable VT100 engine, plus a Z80 cross-compile
@@ -62,33 +62,26 @@ $(TARGET): $(OBJS)
 $(BUILD):
 	mkdir -p $(BUILD)
 
-# Package VTERM.COM onto a CP/M-readable .dsk (fresh CPC DATA-format disk,
-# raw mode -t 2 because a .COM has no AMSDOS header).  This image is read
-# as a data drive by both 1984 (CPC) and 1985 (PCW).
+# Build a bootable PCW CP/M Plus disk with VTERM.COM on it (copy of the boot
+# disk + vterm.com via cpmtools). Boot it and run `vterm`. Runs in the
+# container because cpmtools (pcw diskdef + libdsk) lives there.
 disk: $(DISK)
 $(DISK): $(TARGET)
 	mkdir -p $(DIST)
-	rm -f $(DISK)
-	$(IDSK) $(DISK) -n
-	$(IDSK) $(DISK) -i $(TARGET) -t 2 -f
-	$(IDSK) $(DISK) -l
+	BOOT_DISK="$(BOOT_DISK)" COM="$(abspath $(TARGET))" OUT="$(abspath $(DISK))" \
+	  distrobox enter $(CONTAINER) -- bash $(abspath test/make-pcw-disk.sh)
 
-# Headless console smoke test on the PCW emulator (inside the container):
-# boot CP/M Plus, mount the vterm disk as B:, type `b:`/`vterm`, and capture
-# build/vterm-pcw.ppm.  Leading newlines + ONE_K_PASTE_GAP delay the
-# keystrokes until after boot (see docs/BUILD.md).
-test-pcw: $(DISK)
-	distrobox enter $(CONTAINER) -- bash -c 'ONE_K_PASTE_GAP=60 \
-	  SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$(abspath $(EMU))" \
-	  --disk-a "$(BOOT_DISK)" --disk-b "$(abspath $(DISK))" \
-	  --paste "$$(printf "\n\n\n\n\n\n\n\nb:\nvterm\n")" \
-	  --screenshot-at 1600:"$(abspath $(BUILD))/vterm-pcw.ppm" --exit-after 1650'
-	@echo "Screenshot: $(BUILD)/vterm-pcw.ppm"
+# Headless render test: boot the vterm disk, run vterm from A:, a VT100 peer
+# sends a test pattern, and we screenshot the rendered result.
+test-render: $(DISK)
+	EMU="$(abspath $(EMU))" DISK="$(abspath $(DISK))" \
+	  distrobox enter $(CONTAINER) -- bash $(abspath test/run-render.sh)
+	@echo "Screenshot: $(BUILD)/vterm-render.ppm"
 
-# Headless serial round-trip test: vterm passthrough + an echo peer on the
-# serial PTY. Typed text only shows if it survives the full TX->RX loop.
+# Headless serial round-trip test: vterm + an echo peer on the serial PTY.
+# Typed text only shows if it survives the full TX -> serial -> RX loop.
 test-serial: $(DISK)
-	EMU="$(abspath $(EMU))" BOOT_DISK="$(BOOT_DISK)" DISK="$(abspath $(DISK))" \
+	EMU="$(abspath $(EMU))" DISK="$(abspath $(DISK))" \
 	  distrobox enter $(CONTAINER) -- bash $(abspath test/run-serial.sh)
 	@echo "Screenshot: $(BUILD)/vterm-serial.ppm"
 
