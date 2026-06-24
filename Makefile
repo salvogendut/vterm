@@ -30,8 +30,14 @@ OBJS := $(BUILD)/crt0.rel $(BUILD)/bdos.rel $(BUILD)/cps_io.rel \
         $(BUILD)/cpm.rel $(BUILD)/serial.rel $(BUILD)/vt100.rel \
         $(BUILD)/render.rel $(BUILD)/main.rel
 
-.PHONY: all disk clean test-render test-serial test-vt100
+.PHONY: all disk clean run test-render test-serial test-vt100
 all: $(TARGET)
+
+# Interactive session: launch the emulator GUI with the serial line bridged to
+# a real shell. Boot CP/M, type `vterm`, and use the shell (Ctrl-] quits vterm).
+run: $(DISK)
+	EMU="$(abspath $(EMU))" DISK="$(abspath $(DISK))" \
+	  distrobox enter $(CONTAINER) -- bash $(abspath test/run-interactive.sh)
 
 # Host (gcc) unit tests for the portable VT100 engine, plus a Z80 cross-compile
 # check so the engine keeps building for the target as well.
