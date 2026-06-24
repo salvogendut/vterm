@@ -97,12 +97,13 @@ files to a bootable PCW disk.
 
 The parser/screen-model is deliberately I/O-free and portable so it builds
 with both gcc (host) and SDCC (Z80). `make test-vt100` compiles `vt100.c` with
-gcc against `test/vt100_test.c` (32 assertions over text/wrap/cursor/erase/
-SGR/scroll/DECSTBM/DECSC), then cross-compiles `vt100.c` with `sdcc -mz80` as a
-target build check. The engine takes a caller-allocated `VT` struct (no
-malloc); on the target that will be one global. SDCC emits warning 110
-("…EVELYN the modified DOG") on the TAB arithmetic — that is SDCC's benign
-peephole notice, not a logic issue.
+gcc against `test/vt100_test.c` (52 assertions), then cross-compiles `vt100.c`
+with `sdcc -mz80` as a target build check. The engine takes a caller-allocated
+`VT` struct (no malloc); on the target that is one global. Sequences that need
+a reply (DA `ESC[c`, DSR `ESC[6n`) push bytes onto a small ring the caller
+drains with `vt_resp_getc()` and writes back to the host — keeping the engine
+I/O-free. One subtlety worth a test: SGR `38;5;N` / `38;2;R;G;B` (256-colour /
+truecolour) must consume their sub-parameters, or the `5` reads as BLINK.
 
 ## Renderer — PCW VT52 console (`src/render.c`)
 

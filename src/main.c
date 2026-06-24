@@ -16,14 +16,15 @@
 #include "render.h"
 
 #define CTRL_RBRACKET  0x1D   /* Ctrl-] : local "quit" key */
-#define BURST_CAP      250    /* max inbound bytes per loop before repainting */
+#define BURST_CAP      1024   /* max inbound bytes per loop before repainting */
 
 static VT screen;             /* the terminal screen model (~3.8 KB, BSS) */
 
 void main(void)
 {
 	int           ch;
-	unsigned char k, n;
+	unsigned char k;
+	unsigned int  n;
 
 	serial_init();
 	vt_init(&screen);
@@ -52,6 +53,10 @@ void main(void)
 			render_flush(&screen);
 			screen.dirty = 0;
 		}
+
+		/* Send any replies the engine queued (DA / DSR) back to the host. */
+		while ((ch = vt_resp_getc(&screen)) >= 0)
+			serial_putc((unsigned char)ch);
 
 		/* Forward one local keystroke to the line. */
 		k = conkey();

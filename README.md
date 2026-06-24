@@ -19,19 +19,22 @@ for VT100 handling and terminal UX; vterm is an independent C implementation.
   TX → serial → RX round trip and appears on screen.
 - **Milestone 3 — VT100 parser + screen model: complete.** A portable,
   I/O-free engine (`vt100.[ch]`) parses VT100/ANSI sequences into an 80×24
-  screen model. Covered by host unit tests (`make test-vt100`, 32 checks) and
+  screen model. Covered by host unit tests (`make test-vt100`) and
   cross-compiles for Z80.
 - **Milestone 4 — renderer + full terminal: complete.** `render.[ch]` diffs
   the screen model against a shadow buffer and paints changed cells onto the
   PCW's VT52 console (`ESC Y` positioning, `ESC p/q` inverse, `ESC r/u`
-  bright). `main.c` is now the full terminal loop (serial → VT100 → render;
-  keyboard → serial). Verified end-to-end under real CP/M Plus: a VT100 test
-  pattern (centred title, inverse/bold runs, a cursor-addressed box) renders
-  correctly on the PCW (`make test-render`).
+  bright, `ESC e/f` cursor). `main.c` is the full terminal loop (serial →
+  VT100 → render; keyboard → serial; replies → serial).
+- **Milestone 5 — wider VT100/ANSI coverage: complete.** Line-drawing charset,
+  insert/delete line & char, scroll/erase ops, tab stops, DEC modes
+  (autowrap/origin/cursor), 256-colour/truecolour SGR skipping, and DA/DSR
+  host replies (52 host checks). Verified on the PCW: a TUI pattern with a
+  DEC line-drawing box, inverse/bold, and a working `ESC[6n` cursor report.
 
-This is a working VT100 terminal. Further work is breadth: a wider VT100/ANSI
-subset, configurable console back-ends for other CP/M machines, and UX (status
-line, capture, file transfer). See [Roadmap](#roadmap).
+This is a working VT100 terminal with broad sequence coverage. Remaining work
+is further breadth (alternate screen, other console back-ends) and UX. See
+[Roadmap](#roadmap).
 
 ## Prerequisites
 
@@ -96,15 +99,17 @@ and the emulator paste-timing trick.
    `SETSIO`/firmware. A BDOS-AUX backend could be added behind the same
    interface for portability.
 2. ~~**VT100 parser + screen model.**~~ Done — `vt100.[ch]`, a host-testable
-   state machine maintaining an 80×24 screen model. Subset: text with
-   deferred last-column wrap, C0 controls, cursor moves / CUP / CHA / VPA, ED,
-   EL, SGR attributes, DECSTBM scroll region, IND/RI/NEL, DECSC/DECRC.
+   state machine maintaining an 80×24 screen model.
 3. ~~**Renderer + terminal loop.**~~ Done — `render.[ch]` diffs the model onto
    the PCW VT52 console; `main.c` ties serial, VT100 and render together.
-4. **Breadth.** Wider VT100/ANSI coverage (insert/delete line & char,
-   tab stops, origin mode, more SGR), a configurable console back-end for other
-   CP/M machines (the renderer is PCW-VT52-specific today), `SETSIO`-free DART
-   setup for real hardware, and UX (status line, capture, file transfer).
+4. ~~**Wider VT100/ANSI coverage.**~~ Done — line-drawing charset (`ESC(0`),
+   IL/DL/ICH/DCH/ECH editing, CNL/CPL/SU/SD, tab stops (HTS/TBC/CHT/CBT),
+   modes (DECAWM/DECOM/DECTCEM), 256-colour/truecolour SGR skipping, and DA/DSR
+   replies (queued for the host). Covered by 52 host checks.
+5. **Further breadth.** Alternate screen buffer (for vi/less), a configurable
+   console back-end for other CP/M machines (the renderer is PCW-VT52-specific
+   today), `SETSIO`-free DART setup for real hardware, and UX (status line,
+   capture, file transfer).
 
 ## License
 

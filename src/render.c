@@ -17,6 +17,7 @@ static unsigned char sh_attr[VT_ROWS][VT_COLS];
 static unsigned char cur_r, cur_c;    /* where the console cursor sits     */
 static unsigned char cur_known;       /* is cur_r/cur_c trustworthy        */
 static unsigned char cur_attr;        /* attribute currently selected      */
+static unsigned char cur_shown;       /* console cursor currently visible  */
 
 static void esc2(char a)
 {
@@ -52,7 +53,9 @@ void render_init(void)
     esc2('E');                         /* clear + home */
     esc2('q');                         /* normal video */
     esc2('u');                         /* not bright   */
+    esc2('e');                         /* cursor on    */
     cur_attr = VT_A_NORMAL;
+    cur_shown = 1;
     /* ESC E does not reliably wipe the whole PCW screen, so explicitly erase
      * each of our rows (ESC K = erase to end of line) to start from a known
      * blank console that matches the shadow. */
@@ -99,4 +102,10 @@ void render_flush(VT *t)
     if (cur_attr != VT_A_NORMAL)
         set_attr(VT_A_NORMAL);
     move_to(t->row, (unsigned char)(t->col < VT_COLS ? t->col : VT_COLS - 1));
+
+    /* Track the host's cursor-visibility mode (DECTCEM). */
+    if (vt_cursor_visible(t) != cur_shown) {
+        cur_shown = vt_cursor_visible(t);
+        esc2(cur_shown ? 'e' : 'f');   /* ESC e = on, ESC f = off */
+    }
 }
