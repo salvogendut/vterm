@@ -93,6 +93,17 @@ likewise labelled "CPC,PCW".) iDSK does **not** correctly write PCW-native
 system disks, so we mount this as a *data* drive (B:) rather than trying to add
 files to a bootable PCW disk.
 
+## VT100 engine (`src/vt100.[ch]`)
+
+The parser/screen-model is deliberately I/O-free and portable so it builds
+with both gcc (host) and SDCC (Z80). `make test-vt100` compiles `vt100.c` with
+gcc against `test/vt100_test.c` (32 assertions over text/wrap/cursor/erase/
+SGR/scroll/DECSTBM/DECSC), then cross-compiles `vt100.c` with `sdcc -mz80` as a
+target build check. The engine takes a caller-allocated `VT` struct (no
+malloc); on the target that will be one global. SDCC emits warning 110
+("…EVELYN the modified DOG") on the TAB arithmetic — that is SDCC's benign
+peephole notice, not a logic issue.
+
 ## Serial backend — CPS8256 Z80-DART (`src/cps_io.s`, `src/serial.c`)
 
 The PCW's serial line is channel A of the Z80-DART in the CPS8256 add-on:

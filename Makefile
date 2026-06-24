@@ -30,8 +30,17 @@ LDFLAGS  := -mz80 --no-std-crt0 --code-loc 0x0100 --data-loc 0x0000
 OBJS := $(BUILD)/crt0.rel $(BUILD)/bdos.rel $(BUILD)/cps_io.rel \
         $(BUILD)/cpm.rel $(BUILD)/serial.rel $(BUILD)/main.rel
 
-.PHONY: all disk clean test-pcw test-serial
+.PHONY: all disk clean test-pcw test-serial test-vt100
 all: $(TARGET)
+
+# Host (gcc) unit tests for the portable VT100 engine, plus a Z80 cross-compile
+# check so the engine keeps building for the target as well.
+test-vt100: | $(BUILD)
+	$(CC) -std=c11 -Wall -Wextra -O2 -o $(BUILD)/vt100_test \
+	  src/vt100.c test/vt100_test.c
+	$(BUILD)/vt100_test
+	$(SDCC) $(CFLAGS) -c src/vt100.c -o $(BUILD)/vt100.rel
+	@echo "vt100.c: host tests pass + Z80 cross-compile OK"
 
 # Compile C sources.
 $(BUILD)/%.rel: src/%.c | $(BUILD)

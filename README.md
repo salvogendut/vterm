@@ -17,8 +17,14 @@ for VT100 handling and terminal UX; vterm is an independent C implementation.
   Amstrad CPS8256 Z80-DART directly for non-blocking I/O. Verified under real
   CP/M Plus on the PCW emulator with an echo peer: typed text makes the full
   TX → serial → RX round trip and appears on screen.
+- **Milestone 3 — VT100 parser + screen model: complete.** A portable,
+  I/O-free engine (`vt100.[ch]`) parses VT100/ANSI sequences into an 80×24
+  screen model (glyphs + per-cell attributes, cursor, scroll region). Covered
+  by host unit tests (`make test-vt100`, 32 checks) and cross-compiles for
+  Z80. Not yet wired into the live display — that's the renderer.
 
-The VT100 parser and screen model are next (see [Roadmap](#roadmap)).
+The renderer (screen model → local CP/M console) is next (see
+[Roadmap](#roadmap)).
 
 ## Prerequisites
 
@@ -71,8 +77,9 @@ calling convention, `.COM` packaging, and the emulator paste-timing trick).
 | `src/cpm.h` / `src/cpm.c` | BDOS function constants and console helpers (`conout`, `conin`, `conkey`, `constat`, `prints`) |
 | `src/serial.h` / `src/serial.c` | Serial transport interface + CPS8256 Z80-DART backend (`serial_getc`, `serial_putc`, …) |
 | `src/cps_io.s` | Z80-DART port access (`in`/`out` on `0xE0`/`0xE1`) |
+| `src/vt100.h` / `src/vt100.c` | Portable VT100/ANSI engine: `vt_putc` drives an 80×24 screen model |
 | `src/main.c` | Terminal loop (currently raw serial passthrough) |
-| `test/` | Headless serial test: echo peer + emulator orchestration |
+| `test/` | VT100 host unit tests + headless serial test (echo peer + emulator) |
 
 ## Roadmap
 
@@ -80,10 +87,13 @@ calling convention, `.COM` packaging, and the emulator paste-timing trick).
    Z80-DART backend (non-blocking poll of ports `0xE0`/`0xE1`); baud is left to
    `SETSIO`/firmware. A BDOS-AUX backend could be added behind the same
    interface for portability.
-2. **VT100 parser + screen model.** A host-testable C state machine that
-   consumes the serial byte stream (the `serial → console` path in `main.c`)
-   and maintains a screen buffer.
-3. **Renderer.** Translate the screen model to the local CP/M console.
+2. ~~**VT100 parser + screen model.**~~ Done — `vt100.[ch]`, a host-testable
+   state machine maintaining an 80×24 screen model. Subset: text with
+   deferred last-column wrap, C0 controls, cursor moves / CUP / CHA / VPA, ED,
+   EL, SGR attributes, DECSTBM scroll region, IND/RI/NEL, DECSC/DECRC.
+3. **Renderer.** Walk the screen model and paint the local CP/M console
+   (diff against a shadow buffer; emit the console's cursor-addressing codes).
+   Wire it into the `serial → console` path in `main.c`.
 
 ## License
 
