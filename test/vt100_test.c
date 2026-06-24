@@ -257,6 +257,18 @@ int main(int argc, char **argv)
     feed(&t, "\033[3;5H\033[6n");
     expect_resp(&t, "\033[3;5R", "DSR cursor report");
 
+    /* alternate screen: ?1049 saves/clears, restores on exit */
+    vt_init(&t);
+    feed(&t, "PRIMARY\033[5;5Hx");          /* primary content + cursor (4,5) */
+    feed(&t, "\033[?1049h");                /* enter alt: blank, cursor saved */
+    expect_row(&t, 0, "  ", "alt screen starts blank");
+    feed(&t, "\033[1;1HALT-TEXT");
+    expect_row(&t, 0, "ALT-TEXT", "alt content visible");
+    feed(&t, "\033[?1049l");                /* leave alt: restore primary */
+    expect_row(&t, 0, "PRIMARY", "primary restored on exit");
+    expect_int(t.row, 4, "cursor row restored");
+    expect_int(t.col, 5, "cursor col restored");
+
     /* --- telnet IAC filter ---------------------------------------- */
     {
         Telnet tn;

@@ -34,10 +34,14 @@ for VT100 handling and terminal UX; vterm is an independent C implementation.
   strips negotiation bytes before the VT100 engine and replies with the right
   WILL/WONT/DO/DONT, so real telnet hosts render cleanly. **Confirmed live:**
   dialing `telehack.com` through the PerryFi modem renders the full host
-  session (menus, `cal` with today inverse-highlighted). 55 host checks.
+  session (menus, `cal` with today inverse-highlighted).
+- **Milestone 7 — alternate screen: complete.** DEC modes `?1049`/`?47`/`?1047`
+  (+ `?1048` cursor save) keep a second screen buffer, so full-screen apps
+  (vi, less, tmux) restore the prior screen on exit. Verified on the PCW. 60
+  host checks.
 
 This is a working VT100 telnet terminal. Remaining work is further breadth
-(alternate screen, other console back-ends) and UX. See [Roadmap](#roadmap).
+(other console back-ends) and UX. See [Roadmap](#roadmap).
 
 ## Prerequisites
 
@@ -112,10 +116,10 @@ and the emulator paste-timing trick.
    replies (queued for the host). Covered by 52 host checks.
 5. ~~**Telnet.**~~ Done — `telnet.[ch]` IAC filter; verified live against
    `telehack.com` via the PerryFi modem.
-6. **Further breadth.** Alternate screen buffer (for vi/less), a configurable
-   console back-end for other CP/M machines (the renderer is PCW-VT52-specific
-   today), `SETSIO`-free DART setup for real hardware, and UX (status line,
-   capture, file transfer).
+6. ~~**Alternate screen.**~~ Done — `?1049`/`?47`/`?1047` second screen buffer.
+7. **Further breadth.** A configurable console back-end for other CP/M machines
+   (the renderer is PCW-VT52-specific today), `SETSIO`-free DART setup for real
+   hardware, and UX (status line, capture, file transfer).
 
 ## License
 

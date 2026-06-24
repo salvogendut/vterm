@@ -58,6 +58,13 @@ typedef struct {
 
     unsigned char tabs[VT_COLS];          /* 1 = tab stop at column      */
 
+    /* Alternate screen (DEC ?47/?1047/?1049). While on the alt screen, ch/attr
+       hold the alt content and the saved primary lives in alt_ch/alt_attr. */
+    unsigned char alt_ch[VT_ROWS][VT_COLS];
+    unsigned char alt_attr[VT_ROWS][VT_COLS];
+    unsigned char on_alt;
+    unsigned char alt_save_row, alt_save_col, alt_save_attr;
+
     /* CSI parser scratch. */
     unsigned char state;
     unsigned int  params[VT_NPARAMS];

@@ -283,6 +283,40 @@ static void ctrl(VT *t, unsigned char c)
     }
 }
 
+/* ---- alternate screen ----------------------------------------------- */
+
+/* Copy a whole 24x80 cell plane. Done row by row with an explicit length: a
+ * single memcpy(..., sizeof(t->ch)) misbehaves under SDCC for a 2D-array
+ * struct member referenced through a pointer. */
+static void copy_plane(unsigned char dst[VT_ROWS][VT_COLS],
+                       unsigned char src[VT_ROWS][VT_COLS])
+{
+    unsigned char r;
+    for (r = 0; r < VT_ROWS; r++)
+        memcpy(dst[r], src[r], VT_COLS);
+}
+
+static void enter_alt(VT *t)
+{
+    unsigned char r;
+    if (t->on_alt) return;
+    copy_plane(t->alt_ch,   t->ch);                 /* stash the primary */
+    copy_plane(t->alt_attr, t->attr);
+    for (r = 0; r < VT_ROWS; r++)
+        blank_row(t, r);                            /* alt starts blank  */
+    t->on_alt = 1;
+    t->dirty = 1;
+}
+
+static void leave_alt(VT *t)
+{
+    if (!t->on_alt) return;
+    copy_plane(t->ch,   t->alt_ch);                 /* restore the primary */
+    copy_plane(t->attr, t->alt_attr);
+    t->on_alt = 0;
+    t->dirty = 1;
+}
+
 /* ---- DEC private modes (ESC[?Ph / ESC[?Pl) -------------------------- */
 
 static void set_mode(VT *t, unsigned int m, unsigned char on)
@@ -292,6 +326,23 @@ static void set_mode(VT *t, unsigned int m, unsigned char on)
              t->row = on ? t->top : 0; t->col = 0; t->wrap_pending = 0; break;
     case 7:  t->autowrap = on; break;        /* DECAWM */
     case 25: t->cursor_visible = on; t->dirty = 1; break; /* DECTCEM */
+    case 1048:                               /* save/restore cursor */
+        if (on) { t->alt_save_row = t->row; t->alt_save_col = t->col;
+                  t->alt_save_attr = t->cur_attr; }
+        else    { t->row = t->alt_save_row; t->col = t->alt_save_col;
+                  t->cur_attr = t->alt_save_attr; t->wrap_pending = 0; }
+        break;
+    case 1049:                               /* save cursor + alt screen */
+        if (on) { t->alt_save_row = t->row; t->alt_save_col = t->col;
+                  t->alt_save_attr = t->cur_attr; enter_alt(t); }
+        else    { leave_alt(t); t->row = t->alt_save_row;
+                  t->col = t->alt_save_col; t->cur_attr = t->alt_save_attr;
+                  t->wrap_pending = 0; }
+        break;
+    case 47:                                 /* alternate screen */
+    case 1047:
+        if (on) enter_alt(t); else leave_alt(t);
+        break;
     default: break;
     }
 }
@@ -517,6 +568,8 @@ void vt_init(VT *t)
     t->origin_mode = 0;
     t->cursor_visible = 1;
     t->g0 = t->g1 = t->gl = 0;
+    t->on_alt = 0;
+    t->alt_save_row = t->alt_save_col = t->alt_save_attr = 0;
     for (c = 0; c < VT_COLS; c++)
         t->tabs[c] = (unsigned char)(c && (c % 8) == 0);
     t->state = VT_ST_GROUND;

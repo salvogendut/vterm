@@ -105,6 +105,13 @@ drains with `vt_resp_getc()` and writes back to the host — keeping the engine
 I/O-free. One subtlety worth a test: SGR `38;5;N` / `38;2;R;G;B` (256-colour /
 truecolour) must consume their sub-parameters, or the `5` reads as BLINK.
 
+The alternate screen (`?1049`/`?47`/`?1047`) keeps a second 24x80 plane in the
+`VT` struct and swaps it in/out. **SDCC gotcha:** `memcpy(dst, src, sizeof(t->ch))`
+where `ch` is a 2D-array struct member reached through a pointer does *not*
+copy 24x80 bytes under SDCC (the host gcc test passed, the Z80 build silently
+copied too little and left the alt content on screen). Copy the plane row by
+row with an explicit `VT_COLS` length instead (`copy_plane()`).
+
 ## Renderer — PCW VT52 console (`src/render.c`)
 
 The PCW CP/M Plus console is a VT52-style terminal. The renderer drives it
